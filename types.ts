@@ -10,6 +10,8 @@ export interface Message {
   role: Role;
   content: string;
   timestamp: number;
+  image?: string; // Base64 image data
+  isAscii?: boolean; // Flag to render as ASCII
 }
 
 export interface Persona {

@@ -66,7 +66,6 @@ const App: React.FC = () => {
     document.documentElement.style.setProperty('--primary-glow', glow);
   }, [themeColor]);
 
-  // Set default active session only after login
   useEffect(() => {
     if (appState === 'READY' && !activeSessionId && sessions.length > 0) {
       setActiveSessionId(sessions[0].id);
@@ -126,14 +125,42 @@ const App: React.FC = () => {
     }));
   };
 
-  const handleUpdateBotMessage = (id: string, content: string) => {
+  const handleUpdateBotMessage = (id: string, content: string, image?: string) => {
     if (!activeSessionId) return;
-    setMessageHistory(prev => ({
-      ...prev,
-      [activeSessionId]: (prev[activeSessionId] || []).map(m => 
-        m.id === id ? { ...m, content } : m
-      )
-    }));
+    setMessageHistory(prev => {
+      const currentHistory = prev[activeSessionId] || [];
+      const updatedHistory = currentHistory.map(m => {
+        if (m.id === id) {
+          return { ...m, content, ...(image ? { image } : {}) };
+        }
+        return m;
+      });
+      return { ...prev, [activeSessionId]: updatedHistory };
+    });
+  };
+
+  const handleTriggerImageGen = async (prompt: string) => {
+    if (!activeSessionId || !activeSession) return;
+    
+    const botMessageId = 'bot-img-' + Date.now();
+    const botPlaceholder: Message = {
+      id: botMessageId,
+      role: Role.MODEL,
+      content: `[SIDEBAR_REMOTE_SYNTHESIS]\nPROMPT: ${prompt.toUpperCase()}\nALLOCATING_CYCLES...`,
+      timestamp: Date.now()
+    };
+    
+    handleNewMessage(botPlaceholder);
+    setIsTyping(true);
+
+    const imageData = await geminiService.generateImage(prompt);
+    
+    if (imageData) {
+      handleUpdateBotMessage(botMessageId, `[VISUAL_BUFFER_ESTABLISHED] Direct from Sidebar Console.\nBuffer decypted.`, imageData);
+    } else {
+      handleUpdateBotMessage(botMessageId, `[RENDER_ERROR]: SYNTHESIS_FAILED. System overload.`);
+    }
+    setIsTyping(false);
   };
 
   if (appState === 'BOOTING') {
@@ -149,7 +176,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-black text-[var(--primary)] font-roboto selection:bg-[var(--primary)] selection:text-black animate-in fade-in duration-1000">
-      {/* Visual Glitch Grid */}
       <div className="fixed inset-0 pointer-events-none opacity-[0.03] z-0">
         <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(var(--primary) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
       </div>
@@ -161,6 +187,7 @@ const App: React.FC = () => {
         onCreateSession={handleCreateSession}
         onDeleteSession={handleDeleteSession}
         onRenameSession={handleRenameSession}
+        onGenerateImage={handleTriggerImageGen}
         userName={userName}
         setUserName={setUserName}
         themeColor={themeColor}
@@ -170,7 +197,6 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
-        {/* System Dashboard Top Bar */}
         <div className="hidden sm:flex h-6 bg-[var(--primary)]/10 border-b border-[var(--primary)]/20 px-4 items-center justify-between text-[8px] uppercase font-mono tracking-widest">
            <div className="flex items-center space-x-4">
              <span>CPU_LOAD: 12%</span>
@@ -194,14 +220,12 @@ const App: React.FC = () => {
           onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)}
         />
         
-        {/* Corner Decals */}
         <div className="hidden xs:block absolute top-10 right-2 p-1 pointer-events-none opacity-20 z-20">
           <div className="w-8 h-0.5 bg-[var(--primary)] mb-1"></div>
           <div className="w-4 h-0.5 bg-[var(--primary)] ml-auto"></div>
         </div>
       </main>
 
-      {/* Neural Link Activity Line */}
       <div className="fixed top-0 left-0 md:left-72 right-0 h-0.5 bg-[var(--primary)]/5 z-50 overflow-hidden">
         <div className="h-full bg-[var(--primary)] w-32 shadow-[0_0_15px_var(--primary)] animate-[link_4s_ease-in-out_infinite]"></div>
       </div>

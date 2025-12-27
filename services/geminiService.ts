@@ -12,7 +12,6 @@ export class GeminiService {
 
   private getChatSession(persona: Persona, sessionId: string, history: Message[] = []): Chat {
     if (!this.chatSessions.has(sessionId)) {
-      // Convert our internal Message format to Gemini's Content format
       const geminiHistory: Content[] = history.map(msg => ({
         role: msg.role === Role.USER ? 'user' : 'model',
         parts: [{ text: msg.content }]
@@ -43,6 +42,27 @@ export class GeminiService {
     } catch (error) {
       console.error("Stream error:", error);
       yield `\n[NEURAL_LINK_FAILURE]: ${error instanceof Error ? error.message : 'UNEXPECTED_DISCONNECT'}`;
+    }
+  }
+
+  async generateImage(prompt: string): Promise<string | null> {
+    try {
+      // Re-initialize to ensure latest API key context
+      const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const response = await genAI.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: [{ parts: [{ text: prompt }] }],
+      });
+
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error("Image generation error:", error);
+      return null;
     }
   }
 

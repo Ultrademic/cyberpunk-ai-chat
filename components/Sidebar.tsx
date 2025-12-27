@@ -10,6 +10,7 @@ interface SidebarProps {
   onCreateSession: (personaId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, newName: string) => void;
+  onGenerateImage: (prompt: string) => void;
   userName: string;
   setUserName: (name: string) => void;
   themeColor: string;
@@ -25,6 +26,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onCreateSession,
   onDeleteSession,
   onRenameSession,
+  onGenerateImage,
   userName,
   setUserName,
   themeColor,
@@ -36,6 +38,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [showSettings, setShowSettings] = React.useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  
+  // Image synthesis state
+  const [imgPrompt, setImgPrompt] = useState('');
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
 
   const handleStartEdit = (e: React.MouseEvent, session: Session) => {
     e.stopPropagation();
@@ -48,6 +54,15 @@ const Sidebar: React.FC<SidebarProps> = ({
       onRenameSession(editingSessionId, editValue.trim());
     }
     setEditingSessionId(null);
+  };
+
+  const handleImageGen = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!imgPrompt.trim()) return;
+    setIsSynthesizing(true);
+    onGenerateImage(imgPrompt.trim());
+    setImgPrompt('');
+    setTimeout(() => setIsSynthesizing(false), 2000);
   };
 
   const THEMES = [
@@ -180,6 +195,36 @@ const Sidebar: React.FC<SidebarProps> = ({
                 );
               })}
             </div>
+          </div>
+        </div>
+
+        {/* NEURAL PRINT MODULE (Image Gen) */}
+        <div className="px-4 py-6 border-t border-[var(--primary)]/20 bg-[var(--primary)]/5">
+          <h2 className="text-[10px] font-black text-[var(--primary)]/60 uppercase mb-3 px-2 tracking-[0.2em] flex items-center">
+             <span className="w-2 h-2 bg-[var(--primary)] mr-2 animate-pulse"></span>
+             Neural_Print
+          </h2>
+          <form onSubmit={handleImageGen} className="space-y-2">
+            <div className="relative">
+              <input
+                type="text"
+                value={imgPrompt}
+                onChange={(e) => setImgPrompt(e.target.value)}
+                placeholder="PROMPT_VISUAL..."
+                className="w-full bg-black border border-[var(--primary)]/30 p-2 text-[9px] text-[var(--primary)] focus:border-[var(--primary)] outline-none font-mono uppercase"
+                disabled={isSynthesizing}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isSynthesizing || !imgPrompt.trim()}
+              className={`w-full py-1.5 border border-[var(--primary)]/40 text-[9px] font-bold uppercase tracking-widest transition-all ${isSynthesizing ? 'bg-[var(--primary)] text-black animate-pulse' : 'bg-transparent text-[var(--primary)]/80 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]'}`}
+            >
+              {isSynthesizing ? 'SYNTHESIZING...' : 'GENERATE_ASCII'}
+            </button>
+          </form>
+          <div className="mt-2 text-[7px] text-[var(--primary)]/30 font-mono uppercase tracking-tighter">
+            * Visual output rendered in ASCII format
           </div>
         </div>
 

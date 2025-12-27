@@ -1,7 +1,5 @@
 {
   "name": "Ultrademic Cyber-Chat",
   "description": "A high-octane cyberpunk chat server interface with multiple AI personas, terminal-style aesthetics, and real-time neural link simulations using the Gemini API.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
+  "requestFramePermissions": []
 }
