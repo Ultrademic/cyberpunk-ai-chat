@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Message, Role, Session } from '../types';
 import { geminiService } from '../services/geminiService';
@@ -187,7 +188,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </div>
 
                   {msg.image && (
-                    <div className="mt-4 border-t border-[var(--primary)]/10 pt-4">
+                    <div className="mt-4 border-t border-[var(--primary)]/10 pt-4 max-w-full">
                       <AsciiImage src={msg.image} />
                     </div>
                   )}
