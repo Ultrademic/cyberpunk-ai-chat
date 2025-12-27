@@ -1,21 +1,26 @@
-
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
+import BootSequence from './components/BootSequence';
+import LoginPrompt from './components/LoginPrompt';
 import { CHANNELS, PERSONAS } from './constants';
 import { Session, Message, Role } from './types';
 import { geminiService } from './services/geminiService';
 
 const STORAGE_KEY_SESSIONS = 'ultrademic_sessions_v1';
 const STORAGE_KEY_MESSAGES = 'ultrademic_messages_v1';
+const STORAGE_KEY_USER = 'ultrademic_user_v1';
+const STORAGE_KEY_THEME = 'ultrademic_theme_v1';
+
+type AppState = 'BOOTING' | 'LOGIN' | 'READY';
 
 const App: React.FC = () => {
-  // Initialize sessions from localStorage or constants
+  const [appState, setAppState] = useState<AppState>('BOOTING');
+  
   const [sessions, setSessions] = useState<Session[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
     if (saved) return JSON.parse(saved);
     
-    // Default static channels as starting sessions
     return CHANNELS.map(ch => ({
       id: ch.id,
       name: ch.name,
@@ -25,34 +30,58 @@ const App: React.FC = () => {
     }));
   });
 
-  // Initialize messages from localStorage
   const [messageHistory, setMessageHistory] = useState<Record<string, Message[]>>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_MESSAGES);
     return saved ? JSON.parse(saved) : {};
   });
 
-  const [activeSessionId, setActiveSessionId] = useState<string>(sessions[0].id);
-  const [isTyping, setIsTyping] = useState(false);
+  const [userName, setUserName] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEY_USER) || 'Netrunner_Local';
+  });
 
-  // Sync sessions to localStorage
+  const [themeColor, setThemeColor] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEY_THEME) || '#00ffcc';
+  });
+
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
   }, [sessions]);
 
-  // Sync messages to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(messageHistory));
   }, [messageHistory]);
 
-  const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
-  const activeMessages = messageHistory[activeSessionId] || [];
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_USER, userName);
+  }, [userName]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_THEME, themeColor);
+    document.documentElement.style.setProperty('--primary', themeColor);
+    const glow = themeColor.startsWith('#') ? `${themeColor}66` : themeColor;
+    document.documentElement.style.setProperty('--primary-glow', glow);
+  }, [themeColor]);
+
+  // Set default active session only after login
+  useEffect(() => {
+    if (appState === 'READY' && !activeSessionId && sessions.length > 0) {
+      setActiveSessionId(sessions[0].id);
+    }
+  }, [appState, activeSessionId, sessions]);
+
+  const activeSession = sessions.find(s => s.id === activeSessionId) || null;
+  const activeMessages = activeSessionId ? (messageHistory[activeSessionId] || []) : [];
 
   const handleCreateSession = (personaId: string) => {
     const persona = PERSONAS[personaId];
     const newId = `uplink-${Date.now()}`;
     const newSession: Session = {
       id: newId,
-      name: `uplink_${newId.slice(-4)}`,
+      name: `Uplink_${newId.slice(-4)}`,
       personaId: personaId,
       lastUpdate: Date.now()
     };
@@ -60,11 +89,10 @@ const App: React.FC = () => {
     setSessions(prev => [newSession, ...prev]);
     setActiveSessionId(newId);
 
-    // Initial bot message for context
     const greeting: Message = {
       id: `greet-${newId}`,
       role: Role.MODEL,
-      content: `[NEURAL LINK ESTABLISHED] Identity: ${persona.name}. Waiting for command input...`,
+      content: `[NEURAL LINK ESTABLISHED] Identity: ${persona.name}. Buffer ready for command transmission. Proceed.`,
       timestamp: Date.now()
     };
     setMessageHistory(prev => ({
@@ -81,11 +109,17 @@ const App: React.FC = () => {
     });
     geminiService.resetSession(sessionId);
     if (activeSessionId === sessionId) {
-      setActiveSessionId(sessions[0].id);
+      const remaining = sessions.filter(s => s.id !== sessionId);
+      setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
     }
   };
 
+  const handleRenameSession = (sessionId: string, newName: string) => {
+    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, name: newName } : s));
+  };
+
   const handleNewMessage = (msg: Message) => {
+    if (!activeSessionId) return;
     setMessageHistory(prev => ({
       ...prev,
       [activeSessionId]: [...(prev[activeSessionId] || []), msg]
@@ -93,6 +127,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateBotMessage = (id: string, content: string) => {
+    if (!activeSessionId) return;
     setMessageHistory(prev => ({
       ...prev,
       [activeSessionId]: (prev[activeSessionId] || []).map(m => 
@@ -101,52 +136,83 @@ const App: React.FC = () => {
     }));
   };
 
+  if (appState === 'BOOTING') {
+    return <BootSequence onComplete={() => setAppState('LOGIN')} />;
+  }
+
+  if (appState === 'LOGIN') {
+    return <LoginPrompt userName={userName} onLogin={(name) => {
+      setUserName(name);
+      setAppState('READY');
+    }} />;
+  }
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-black text-[#00ffcc] font-roboto selection:bg-[#00ffcc]/30 selection:text-black">
-      {/* Glitch Grid Background Overlay */}
-      <div className="fixed inset-0 pointer-events-none opacity-5 z-0">
-        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(#00ffcc 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+    <div className="flex h-screen w-screen overflow-hidden bg-black text-[var(--primary)] font-roboto selection:bg-[var(--primary)] selection:text-black animate-in fade-in duration-1000">
+      {/* Visual Glitch Grid */}
+      <div className="fixed inset-0 pointer-events-none opacity-[0.03] z-0">
+        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(var(--primary) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
       </div>
 
       <Sidebar 
         sessions={sessions} 
-        activeSessionId={activeSessionId}
+        activeSessionId={activeSessionId || ''}
         onSelectSession={setActiveSessionId}
         onCreateSession={handleCreateSession}
         onDeleteSession={handleDeleteSession}
+        onRenameSession={handleRenameSession}
+        userName={userName}
+        setUserName={setUserName}
+        themeColor={themeColor}
+        setThemeColor={setThemeColor}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
       
-      <main className="flex-1 flex flex-col relative z-10">
+      <main className="flex-1 flex flex-col relative z-10 w-full overflow-hidden">
+        {/* System Dashboard Top Bar */}
+        <div className="hidden sm:flex h-6 bg-[var(--primary)]/10 border-b border-[var(--primary)]/20 px-4 items-center justify-between text-[8px] uppercase font-mono tracking-widest">
+           <div className="flex items-center space-x-4">
+             <span>CPU_LOAD: 12%</span>
+             <span>MEM_USAGE: 4.2GB</span>
+             <span>NODE: SYD-0x9</span>
+           </div>
+           <div className="flex items-center space-x-4">
+             <span className="animate-pulse text-green-500">LINK_STABLE</span>
+             <span>{new Date().toLocaleDateString()}</span>
+           </div>
+        </div>
+
         <ChatInterface 
           session={activeSession} 
           messages={activeMessages}
+          userName={userName}
           onNewMessage={handleNewMessage}
           onUpdateBotMessage={handleUpdateBotMessage}
           isTyping={isTyping}
           setIsTyping={setIsTyping}
+          onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)}
         />
         
-        {/* Visual Decoration Elements */}
-        <div className="absolute top-0 right-0 p-1 pointer-events-none opacity-20 z-20">
-          <div className="w-12 h-1 bg-[#00ffcc]"></div>
-          <div className="w-1 h-12 bg-[#00ffcc] ml-auto"></div>
-        </div>
-        <div className="absolute bottom-0 left-0 p-1 pointer-events-none opacity-20 z-20">
-          <div className="w-1 h-12 bg-[#00ffcc]"></div>
-          <div className="w-12 h-1 bg-[#00ffcc]"></div>
+        {/* Corner Decals */}
+        <div className="hidden xs:block absolute top-10 right-2 p-1 pointer-events-none opacity-20 z-20">
+          <div className="w-8 h-0.5 bg-[var(--primary)] mb-1"></div>
+          <div className="w-4 h-0.5 bg-[var(--primary)] ml-auto"></div>
         </div>
       </main>
 
-      {/* Connectivity Loading Line */}
-      <div className="fixed top-0 left-64 right-0 h-0.5 bg-[#00ffcc]/10 z-50 overflow-hidden">
-        <div className="h-full bg-[#00ffcc] w-24 shadow-[0_0_10px_#00ffcc] animate-[loading_6s_linear_infinite]"></div>
+      {/* Neural Link Activity Line */}
+      <div className="fixed top-0 left-0 md:left-72 right-0 h-0.5 bg-[var(--primary)]/5 z-50 overflow-hidden">
+        <div className="h-full bg-[var(--primary)] w-32 shadow-[0_0_15px_var(--primary)] animate-[link_4s_ease-in-out_infinite]"></div>
       </div>
       
       <style>{`
-        @keyframes loading {
-          0% { transform: translateX(-200%); }
+        @keyframes link {
+          0% { transform: translateX(-100%); }
           100% { transform: translateX(800%); }
         }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </div>
   );
