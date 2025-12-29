@@ -3,11 +3,11 @@ import { GoogleGenAI, Chat, GenerateContentResponse, Content } from "@google/gen
 import { Message, Role, Persona } from "../types";
 
 export class GeminiService {
-  private ai: GoogleGenAI;
   private chatSessions: Map<string, Chat> = new Map();
 
-  constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  private getClient() {
+    // Creating instance right before call as per instructions for dynamic API keys
+    return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
   }
 
   private getChatSession(persona: Persona, sessionId: string, history: Message[] = []): Chat {
@@ -17,7 +17,8 @@ export class GeminiService {
         parts: [{ text: msg.content }]
       }));
 
-      const chat = this.ai.chats.create({
+      const client = this.getClient();
+      const chat = client.chats.create({
         model: 'gemini-3-flash-preview',
         config: {
           systemInstruction: persona.systemInstruction,
@@ -39,17 +40,24 @@ export class GeminiService {
         const c = chunk as GenerateContentResponse;
         yield c.text || "";
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Stream error:", error);
-      yield `\n[NEURAL_LINK_FAILURE]: ${error instanceof Error ? error.message : 'UNEXPECTED_DISCONNECT'}`;
+      const errorMessage = error?.message || '';
+      
+      if (errorMessage.includes("429") || errorMessage.includes("quota")) {
+        yield `\n\n[FATAL_ERROR]: QUOTA_EXHAUSTED. The shared neural link is saturated. Use a personal API key in 'Matrix Config' to bypass limits.`;
+      } else if (errorMessage.includes("Requested entity was not found")) {
+        yield `\n\n[FATAL_ERROR]: INVALID_KEY_LINK. Please re-authorize your neural uplink in settings.`;
+      } else {
+        yield `\n\n[NEURAL_LINK_FAILURE]: ${errorMessage || 'UNEXPECTED_DISCONNECT'}`;
+      }
     }
   }
 
   async generateImage(prompt: string): Promise<string | null> {
     try {
-      // Re-initialize to ensure latest API key context
-      const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      const response = await genAI.models.generateContent({
+      const client = this.getClient();
+      const response = await client.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: [{ parts: [{ text: prompt }] }],
       });
